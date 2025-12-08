@@ -1,1 +1,1 @@
-# mahjong-backend
+# mahjong-api
