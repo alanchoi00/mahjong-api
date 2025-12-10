@@ -34,7 +34,7 @@ jobs:
       - *install-pipenv-dependencies
       - run:
           name: Run linting
-          command: pipenv run flake8 .
+          command: pipenv run ruff check .
 
 workflows:
   version: 2

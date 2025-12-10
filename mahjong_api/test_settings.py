@@ -1,5 +1,3 @@
-# mahjong_api/test_settings.py
-
 from .settings import *  # noqa
 
 DEBUG = True
