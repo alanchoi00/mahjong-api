@@ -13,6 +13,9 @@ psycopg2-binary = "*"
 pip = "*"
 gunicorn = "*"
 whitenoise = "*"
+celery = "*"
+boto3 = "*"
+django-celery-results = "*"
 
 [dev-packages]
 

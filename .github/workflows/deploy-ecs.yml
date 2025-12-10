@@ -1,4 +1,4 @@
-name: Deploy Django to ECS
+name: Deploy Django to ECS (Web + Worker)
 
 on:
   push:
@@ -12,9 +12,16 @@ env:
   AWS_REGION: ap-southeast-2
   ECR_REPOSITORY: mahjong-api
   ECS_CLUSTER: mahjong-cluster
-  ECS_SERVICE: mahjong-api-task-service-yzr4x1bz
-  ECS_TASK_DEFINITION: .aws/ecs-task-def.json
-  CONTAINER_NAME: web
+
+  # Web
+  ECS_WEB_SERVICE: mahjong-api-task-service-yzr4x1bz
+  ECS_WEB_TASK_DEFINITION: .aws/ecs-task-def.json
+  WEB_CONTAINER_NAME: web
+
+  # Worker
+  ECS_WORKER_SERVICE: mahjong-worker-service
+  ECS_WORKER_TASK_DEFINITION: .aws/ecs-worker-task-def.json
+  WORKER_CONTAINER_NAME: worker
 
 jobs:
   deploy:
@@ -48,23 +55,53 @@ jobs:
             --push .
           echo "image=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      - name: Render ECS task definition
-        id: render-task
+      # --------------------------
+      # Render task definitions
+      # --------------------------
+
+      - name: Render WEB task definition
+        id: render-web
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition: ${{ env.ECS_TASK_DEFINITION }}
-          container-name: ${{ env.CONTAINER_NAME }}
+          task-definition: ${{ env.ECS_WEB_TASK_DEFINITION }}
+          container-name: ${{ env.WEB_CONTAINER_NAME }}
           image: ${{ steps.build-image.outputs.image }}
 
-      - name: Register new task definition revision
-        id: register-task
+      - name: Render WORKER task definition
+        id: render-worker
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ env.ECS_WORKER_TASK_DEFINITION }}
+          container-name: ${{ env.WORKER_CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      # --------------------------
+      # Register new revisions
+      # --------------------------
+
+      - name: Register WEB task definition revision
+        id: register-web
         run: |
           ARN=$(aws ecs register-task-definition \
-            --cli-input-json file://${{ steps.render-task.outputs.task-definition }} \
+            --cli-input-json file://${{ steps.render-web.outputs.task-definition }} \
             --query 'taskDefinition.taskDefinitionArn' \
             --output text)
           echo "arn=$ARN" >> $GITHUB_OUTPUT
-          echo "Registered: $ARN"
+          echo "Registered WEB: $ARN"
+
+      - name: Register WORKER task definition revision
+        id: register-worker
+        run: |
+          ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://${{ steps.render-worker.outputs.task-definition }} \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+          echo "arn=$ARN" >> $GITHUB_OUTPUT
+          echo "Registered WORKER: $ARN"
+
+      # --------------------------
+      # Run migrations (one-off)
+      # --------------------------
 
       - name: Run Django migrations
         env:
@@ -78,7 +115,7 @@ jobs:
             --region ${{ env.AWS_REGION }} \
             --cluster ${{ env.ECS_CLUSTER }} \
             --launch-type FARGATE \
-            --task-definition ${{ steps.register-task.outputs.arn }} \
+            --task-definition ${{ steps.register-web.outputs.arn }} \
             --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS_JSON],securityGroups=[$SGS_JSON],assignPublicIp=ENABLED}" \
             --overrides '{
               "containerOverrides": [
@@ -89,42 +126,74 @@ jobs:
               ]
             }'
 
-      - name: Deploy to ECS service
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.render-task.outputs.task-definition }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          service: ${{ env.ECS_SERVICE }}
-          wait-for-service-stability: true
+      # --------------------------
+      # Deploy both services
+      # --------------------------
 
-      - name: Verify ECS rollout succeeded
+      - name: Update WEB service to new revision
         run: |
-          STATE=$(aws ecs describe-services \
+          aws ecs update-service \
             --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_SERVICE }} \
-            --query "services[0].deployments[0].rolloutState" \
-            --output text)
+            --service ${{ env.ECS_WEB_SERVICE }} \
+            --task-definition ${{ steps.register-web.outputs.arn }} \
+            --force-new-deployment \
+            --no-paginate
 
-          echo "Rollout state: $STATE"
-
-          if [ "$STATE" != "COMPLETED" ]; then
-            echo "ECS rollout did not complete successfully."
-            exit 1
-          fi
-
-      - name: Verify desired tasks are running
+      - name: Update WORKER service to new revision
         run: |
-          read DESIRED RUNNING <<EOF
-          $(aws ecs describe-services \
+          aws ecs update-service \
             --cluster ${{ env.ECS_CLUSTER }} \
-            --services ${{ env.ECS_SERVICE }} \
-            --query "services[0].[desiredCount,runningCount]" \
-            --output text)
-          EOF
+            --service ${{ env.ECS_WORKER_SERVICE }} \
+            --task-definition ${{ steps.register-worker.outputs.arn }} \
+            --force-new-deployment \
+            --no-paginate
 
-          echo "Desired: $DESIRED, Running: $RUNNING"
+      # --------------------------
+      # Robust rollout verification
+      # (avoids flaky waiter)
+      # --------------------------
 
-          if [ "$RUNNING" -lt "$DESIRED" ]; then
-            echo "Not all desired tasks are running."
-            exit 1
-          fi
+      - name: Verify WEB + WORKER rollouts
+        run: |
+          set -e
+
+          wait_service () {
+            local svc="$1"
+            echo "---- Checking rollout for: $svc ----"
+
+            for i in $(seq 1 60); do
+              read DESIRED RUNNING STATE <<EOF
+              $(aws ecs describe-services \
+              --cluster "${{ env.ECS_CLUSTER }}" \
+              --services "$svc" \
+              --query "services[0].[desiredCount,runningCount,deployments[?status=='PRIMARY']|[0].rolloutState]" \
+              --output text)
+              EOF
+
+              echo "$svc => desired=$DESIRED running=$RUNNING state=$STATE"
+
+              if [ "$STATE" = "FAILED" ]; then
+                echo "Rollout FAILED for $svc"
+                return 1
+              fi
+
+              if [ "$STATE" = "COMPLETED" ] && [ "$RUNNING" -ge "$DESIRED" ]; then
+                echo "Rollout COMPLETED for $svc"
+                return 0
+              fi
+
+              sleep 10
+            done
+
+            echo "Rollout timeout for $svc"
+            return 1
+          }
+
+          wait_service "${{ env.ECS_WEB_SERVICE }}"
+          wait_service "${{ env.ECS_WORKER_SERVICE }}"
+
+      # Optional: log final ARNs for visibility
+      - name: Deployment summary
+        run: |
+          echo "WEB task:    ${{ steps.register-web.outputs.arn }}"
+          echo "WORKER task: ${{ steps.register-worker.outputs.arn }}"

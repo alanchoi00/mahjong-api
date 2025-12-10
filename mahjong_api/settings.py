@@ -15,9 +15,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 from urllib.parse import urlparse
 
-import logging
-
-logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -48,6 +45,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_celery_results",
     "rest_framework",
     "core",
     "rules",
@@ -96,7 +94,6 @@ if isinstance(DATABASE_URL, bytes):
 
 if DATABASE_URL and DEBUG is False:
     tmp = urlparse(DATABASE_URL)
-    logger.info(f"Configuring database from DATABASE_URL: {DATABASE_URL}")
 
     DATABASES = {
         "default": {
@@ -112,13 +109,50 @@ if DATABASE_URL and DEBUG is False:
 
 else:
     # Local/dev-safe fallback
-    logger.info("Using local SQLite database for development/testing purposes.")
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": os.path.join(BASE_DIR, "db.sqlite3"),
         }
     }
+
+# Broker
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "sqs://")
+
+# Results
+# Keep it simple: store results in DB
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "django-db")
+
+# Serialization
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+
+CELERY_TIMEZONE = "Australia/Sydney"
+
+# Reliability
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+
+# Tune for inference
+CELERY_TASK_SOFT_TIME_LIMIT = 25
+CELERY_TASK_TIME_LIMIT = 30
+
+# SQS transport config
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    "region": os.getenv("AWS_REGION", "ap-southeast-2"),
+    "visibility_timeout": int(os.getenv("CELERY_VISIBILITY_TIMEOUT", "120")),
+    "polling_interval": 1,
+
+    # Bind Celery to your queue explicitly
+    "predefined_queues": {
+        "mahjong-detect-queue": {
+            "url": os.getenv("CELERY_SQS_QUEUE_URL"),
+        }
+    }
+}
+
+CELERY_TASK_DEFAULT_QUEUE = os.getenv("CELERY_TASK_DEFAULT_QUEUE", "mahjong-detect-queue")
 
 
 # Password validation
