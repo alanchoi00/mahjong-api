@@ -24,11 +24,15 @@ router = routers.DefaultRouter()
 
 
 def healthz(_):
-    return JsonResponse({"ok": True})
+    return JsonResponse({'ok': True})
+
 
 urlpatterns = [
     path('', include(router.urls)),
-    path("admin/", admin.site.urls),
-    path("healthz", healthz),
-    path('api-auth/', include('rest_framework.urls', namespace='rest_framework'))
+    path('admin/', admin.site.urls),
+    path('healthz', healthz),
+    path(
+        'api-auth/',
+        include('rest_framework.urls', namespace='rest_framework'),
+    ),
 ]

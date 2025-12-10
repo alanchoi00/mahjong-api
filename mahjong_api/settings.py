@@ -26,109 +26,113 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in ("true", "1", "yes")
+DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() in ('true', '1', 'yes')
 
-ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
+ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '*').split(',')
 
 # CSRF trusted origins for production
-CSRF_TRUSTED_ORIGINS = os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS") else []
+CSRF_TRUSTED_ORIGINS = (
+    os.getenv('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',')
+    if os.getenv('DJANGO_CSRF_TRUSTED_ORIGINS')
+    else []
+)
 
 # Application definition
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
-    "django.contrib.auth",
-    "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django.contrib.messages",
-    "django.contrib.staticfiles",
-    "django_celery_results",
-    "rest_framework",
-    "core",
-    "rules",
-    "hands",
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'django_celery_results',
+    'rest_framework',
+    'core',
+    'rules',
+    'hands',
 ]
 
 MIDDLEWARE = [
-    "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
-    "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = "mahjong_api.urls"
+ROOT_URLCONF = 'mahjong_api.urls'
 
 TEMPLATES = [
     {
-        "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
-        "APP_DIRS": True,
-        "OPTIONS": {
-            "context_processors": [
-                "django.template.context_processors.request",
-                "django.contrib.auth.context_processors.auth",
-                "django.contrib.messages.context_processors.messages",
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = "mahjong_api.wsgi.application"
+WSGI_APPLICATION = 'mahjong_api.wsgi.application'
 
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASE_URL = os.getenv("DATABASE_URL", "")
+DATABASE_URL = os.getenv('DATABASE_URL', '')
 
 # Defensive: handle accidental bytes
 if isinstance(DATABASE_URL, bytes):
-    DATABASE_URL = DATABASE_URL.decode("utf-8")
+    DATABASE_URL = DATABASE_URL.decode('utf-8')
 
 if DATABASE_URL and DEBUG is False:
     tmp = urlparse(DATABASE_URL)
 
     DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": (tmp.path or "").lstrip("/"),
-            "USER": tmp.username or "",
-            "PASSWORD": tmp.password or "",
-            "HOST": tmp.hostname or "",
-            "PORT": tmp.port or 5432,
-            "CONN_MAX_AGE": 60,
-        }
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': (tmp.path or '').lstrip('/'),
+            'USER': tmp.username or '',
+            'PASSWORD': tmp.password or '',
+            'HOST': tmp.hostname or '',
+            'PORT': tmp.port or 5432,
+            'CONN_MAX_AGE': 60,
+        },
     }
 
 else:
     # Local/dev-safe fallback
     DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": os.path.join(BASE_DIR, "db.sqlite3"),
-        }
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        },
     }
 
 # Broker
-CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "sqs://")
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'sqs://')
 
 # Results
 # Keep it simple: store results in DB
-CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "django-db")
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'django-db')
 
 # Serialization
-CELERY_ACCEPT_CONTENT = ["json"]
-CELERY_TASK_SERIALIZER = "json"
-CELERY_RESULT_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
 
-CELERY_TIMEZONE = "Australia/Sydney"
+CELERY_TIMEZONE = 'Australia/Sydney'
 
 # Reliability
 CELERY_TASK_ACKS_LATE = True
@@ -140,19 +144,21 @@ CELERY_TASK_TIME_LIMIT = 30
 
 # SQS transport config
 CELERY_BROKER_TRANSPORT_OPTIONS = {
-    "region": os.getenv("AWS_REGION", "ap-southeast-2"),
-    "visibility_timeout": int(os.getenv("CELERY_VISIBILITY_TIMEOUT", "120")),
-    "polling_interval": 1,
-
+    'region': os.getenv('AWS_REGION', 'ap-southeast-2'),
+    'visibility_timeout': int(os.getenv('CELERY_VISIBILITY_TIMEOUT', '120')),
+    'polling_interval': 1,
     # Bind Celery to your queue explicitly
-    "predefined_queues": {
-        "mahjong-detect-queue": {
-            "url": os.getenv("CELERY_SQS_QUEUE_URL"),
-        }
-    }
+    'predefined_queues': {
+        'mahjong-detect-queue': {
+            'url': os.getenv('CELERY_SQS_QUEUE_URL'),
+        },
+    },
 }
 
-CELERY_TASK_DEFAULT_QUEUE = os.getenv("CELERY_TASK_DEFAULT_QUEUE", "mahjong-detect-queue")
+CELERY_TASK_DEFAULT_QUEUE = os.getenv(
+    'CELERY_TASK_DEFAULT_QUEUE',
+    'mahjong-detect-queue',
+)
 
 
 # Password validation
@@ -160,16 +166,16 @@ CELERY_TASK_DEFAULT_QUEUE = os.getenv("CELERY_TASK_DEFAULT_QUEUE", "mahjong-dete
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
     },
     {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
     },
     {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
     },
     {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
 
@@ -177,9 +183,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = "en-us"
+LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = "UTC"
+TIME_ZONE = 'UTC'
 
 USE_I18N = True
 
@@ -189,18 +195,18 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # WhiteNoise for serving static files in production
 STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
     },
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
     },
 }
 
 # Default primary key field type
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

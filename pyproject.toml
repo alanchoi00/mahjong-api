@@ -32,7 +32,8 @@ unfixable = [
 #   e.g. `from .default import *` and then `MIDDLEWARE += ...`
 # F841: unused variables
 '__init__.py' = ['F401', 'F403']
-'mahjong_api/settings.py' = ['F403', 'F405']
+'mahjong_api/settings.py' = ['F403', 'F405', 'E501']
+'mahjong_api/test_settings.py' = ['F403', 'F405', 'E501']
 '*/migrations/*' = ['E501']
 '*/tests/*' = ['E501', 'E722', 'F401', 'F841']
 

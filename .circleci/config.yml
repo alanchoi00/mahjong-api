@@ -1,31 +1,63 @@
 version: 2.1
 
-aliases:
-- &python
-  docker:
-    - image: cimg/python:3.12
-- &install-pipenv-dependencies
-  run:
-    name: Install pipenv and dependencies
-    command: |
-      python -m pip install --upgrade pip pipenv setuptools
-      pipenv install --dev --deploy
+executors:
+  python-executor:
+    docker:
+      - image: cimg/python:3.13
+
+commands:
+  install-pipenv-dependencies:
+    description: Install pipenv and project dependencies
+    steps:
+      - run:
+          name: Install pipenv and dependencies
+          environment:
+            PIPENV_YES: "1"
+            PIPENV_VENV_IN_PROJECT: "1"
+          command: |
+            python -m pip install --upgrade pip pipenv setuptools
+            pipenv install --dev --deploy
 
 jobs:
-  test:
-    <<: *python
+
+  check_migrations:
+    executor: python-executor
     steps:
       - checkout
-      - *install-pipenv-dependencies
+      - install-pipenv-dependencies
+      - run:
+          name: Check for missing migrations
+          command: |
+            export DJANGO_SETTINGS_MODULE=mahjong_api.test_settings
+            pipenv run python manage.py makemigrations --check --dry-run
+
+  test:
+    executor: python-executor
+    steps:
+      - checkout
+      - install-pipenv-dependencies
       - run:
           name: Run tests
-          command: pipenv run python manage.py test
+          command: |
+            export DJANGO_SETTINGS_MODULE=mahjong_api.test_settings
+            pipenv run python manage.py test
 
   lint:
-    <<: *python
+    executor: python-executor
     steps:
       - checkout
-      - *install-pipenv-dependencies
+      - install-pipenv-dependencies
       - run:
-          name: Run linting
-          command: pipenv run flake8 .
+          name: Run linting (ruff)
+          command: pipenv run ruff check .
+
+workflows:
+  version: 2
+
+  pr_checks_and_ci:
+    jobs:
+      - check_migrations
+      - test:
+          requires:
+            - check_migrations
+      - lint
