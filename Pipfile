@@ -18,6 +18,7 @@ boto3 = "*"
 django-celery-results = "*"
 
 [dev-packages]
+ruff = "*"
 
 [requires]
 python_version = "3.13"
