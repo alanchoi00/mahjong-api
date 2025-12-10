@@ -1,26 +1,42 @@
 version: 2.1
 
-references:
-  python-executor: &python-executor
+executors:
+  python-executor:
     docker:
       - image: cimg/python:3.13
 
-  install-pipenv-dependencies: &install-pipenv-dependencies
-    run:
-      name: Install pipenv and dependencies
-      environment:
-        PIPENV_YES: "1"
-        PIPENV_VENV_IN_PROJECT: "1"
-      command: |
-        python -m pip install --upgrade pip pipenv setuptools
-        pipenv install --dev --deploy
+commands:
+  install-pipenv-dependencies:
+    description: Install pipenv and project dependencies
+    steps:
+      - run:
+          name: Install pipenv and dependencies
+          environment:
+            PIPENV_YES: "1"
+            PIPENV_VENV_IN_PROJECT: "1"
+          command: |
+            python -m pip install --upgrade pip pipenv setuptools
+            pipenv install --dev --deploy
 
 jobs:
-  check_migrations:
-    <<: *python-executor
+  pr_check:
+    executor: python-executor
     steps:
       - checkout
-      - *install-pipenv-dependencies
+      - run:
+          name: Check PR (title, labels, assignee + comment)
+          command: |
+            if [ -z "${CIRCLE_PULL_REQUEST:-}" ]; then
+              echo "Not a PR build; skipping PR check"
+              exit 0
+            fi
+            python .circleci/check_pr.py
+
+  check_migrations:
+    executor: python-executor
+    steps:
+      - checkout
+      - install-pipenv-dependencies
       - run:
           name: Check for missing migrations
           command: |
@@ -28,10 +44,10 @@ jobs:
             pipenv run python manage.py makemigrations --check --dry-run
 
   test:
-    <<: *python-executor
+    executor: python-executor
     steps:
       - checkout
-      - *install-pipenv-dependencies
+      - install-pipenv-dependencies
       - run:
           name: Run tests
           command: |
@@ -39,20 +55,26 @@ jobs:
             pipenv run python manage.py test
 
   lint:
-    <<: *python-executor
+    executor: python-executor
     steps:
       - checkout
-      - *install-pipenv-dependencies
+      - install-pipenv-dependencies
       - run:
           name: Run linting (ruff)
           command: pipenv run ruff check .
 
 workflows:
   version: 2
-  test_and_lint:
+
+  pr_checks_and_ci:
     jobs:
-      - check_migrations
+      - pr_check
+      - check_migrations:
+          requires:
+            - pr_check
       - test:
           requires:
             - check_migrations
-      - lint
+      - lint:
+          requires:
+            - pr_check
