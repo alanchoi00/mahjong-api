@@ -3,11 +3,14 @@ version: 2.1
 references:
   python-executor: &python-executor
     docker:
-      - image: cimg/python:3.12
+      - image: cimg/python:3.13
 
   install-pipenv-dependencies: &install-pipenv-dependencies
     run:
       name: Install pipenv and dependencies
+      environment:
+        PIPENV_YES: "1"
+        PIPENV_VENV_IN_PROJECT: "1"
       command: |
         python -m pip install --upgrade pip pipenv setuptools
         pipenv install --dev --deploy
