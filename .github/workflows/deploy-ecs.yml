@@ -26,6 +26,9 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment:
+        name: production
+        url: https://api.mahjongcalc.com
 
     steps:
       - name: Checkout
@@ -149,8 +152,7 @@ jobs:
             --no-paginate
 
       # --------------------------
-      # Robust rollout verification
-      # (avoids flaky waiter)
+      # Rollout verification
       # --------------------------
 
       - name: Verify WEB + WORKER rollouts
