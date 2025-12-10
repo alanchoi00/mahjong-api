@@ -1,0 +1,27 @@
+name: PR Health
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+      - labeled
+      - unlabeled
+      - assigned
+      - unassigned
+
+jobs:
+  pr_health:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run PR health check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/check_pr.py

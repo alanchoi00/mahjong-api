@@ -19,18 +19,6 @@ commands:
             pipenv install --dev --deploy
 
 jobs:
-  pr_check:
-    executor: python-executor
-    steps:
-      - checkout
-      - run:
-          name: Check PR (title, labels, assignee + comment)
-          command: |
-            if [ -z "${CIRCLE_PULL_REQUEST:-}" ]; then
-              echo "Not a PR build; skipping PR check"
-              exit 0
-            fi
-            python .circleci/scripts/check_pr.py
 
   check_migrations:
     executor: python-executor
@@ -68,13 +56,8 @@ workflows:
 
   pr_checks_and_ci:
     jobs:
-      - pr_check
-      - check_migrations:
-          requires:
-            - pr_check
+      - check_migrations
       - test:
           requires:
             - check_migrations
-      - lint:
-          requires:
-            - pr_check
+      - lint
