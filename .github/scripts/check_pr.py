@@ -30,6 +30,7 @@ def github_api(url: str, method: str = 'GET', data=None):
 
 def update_pr_comment(owner: str, repo: str, pr_number: int, body: str):
     """Create or update a PR comment with a stable identifier."""
+    # List comments for this PR
     comments_url = f'https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments'
     comments = github_api(comments_url)
 
@@ -42,7 +43,7 @@ def update_pr_comment(owner: str, repo: str, pr_number: int, body: str):
     full_body = f'{BOT_IDENTIFIER}\n{body}'
 
     if existing_id:
-        update_url = f'{comments_url}/{existing_id}'
+        update_url = f'https://api.github.com/repos/{owner}/{repo}/issues/comments/{existing_id}'
         github_api(update_url, method='PATCH', data={'body': full_body})
         print(f'Updated PR comment (id={existing_id})')
     else:
