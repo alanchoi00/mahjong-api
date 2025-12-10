@@ -1,31 +1,41 @@
 version: 2.1
 
-aliases:
-- &python
-  docker:
-    - image: cimg/python:3.12
-- &install-pipenv-dependencies
-  run:
-    name: Install pipenv and dependencies
-    command: |
-      python -m pip install --upgrade pip pipenv setuptools
-      pipenv install --dev --deploy
+references:
+  python-executor: &python-executor
+    docker:
+      - image: cimg/python:3.12
+
+  install-pipenv-dependencies: &install-pipenv-dependencies
+    run:
+      name: Install pipenv and dependencies
+      command: |
+        python -m pip install --upgrade pip pipenv setuptools
+        pipenv install --dev --deploy
 
 jobs:
   test:
-    <<: *python
+    <<: *python-executor
     steps:
       - checkout
       - *install-pipenv-dependencies
       - run:
           name: Run tests
-          command: pipenv run python manage.py test
+          command: |
+            export DJANGO_SETTINGS_MODULE=mahjong_api.test_settings
+            pipenv run python manage.py test
 
   lint:
-    <<: *python
+    <<: *python-executor
     steps:
       - checkout
       - *install-pipenv-dependencies
       - run:
           name: Run linting
           command: pipenv run flake8 .
+
+workflows:
+  version: 2
+  test_and_lint:
+    jobs:
+      - test
+      - lint
