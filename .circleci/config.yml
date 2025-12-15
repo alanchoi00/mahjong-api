@@ -5,6 +5,12 @@ executors:
     docker:
       - image: cimg/python:3.13
 
+  # Machine executor for tests requiring Docker (testcontainers)
+  machine-executor:
+    machine:
+      image: ubuntu-2404:current
+    resource_class: medium
+
 commands:
   install-pipenv-dependencies:
     description: Install pipenv and project dependencies
@@ -18,8 +24,27 @@ commands:
             python -m pip install --upgrade pip pipenv setuptools
             pipenv install --dev --deploy
 
-jobs:
+  install-python-machine:
+    description: Install Python 3.13 on machine executor
+    steps:
+      - run:
+          name: Install Python 3.13
+          command: |
+            sudo add-apt-repository -y ppa:deadsnakes/ppa
+            sudo apt-get update
+            sudo apt-get install -y python3.13 python3.13-venv python3.13-dev
+            sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13 1
+            sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.13 1
+      - run:
+          name: Install pipenv and dependencies
+          environment:
+            PIPENV_YES: "1"
+            PIPENV_VENV_IN_PROJECT: "1"
+          command: |
+            python -m pip install --upgrade pip pipenv setuptools
+            pipenv install --dev --deploy
 
+jobs:
   check_migrations:
     executor: python-executor
     steps:
@@ -28,19 +53,22 @@ jobs:
       - run:
           name: Check for missing migrations
           command: |
-            export DJANGO_SETTINGS_MODULE=mahjong_api.test_settings
             pipenv run python manage.py makemigrations --check --dry-run
+      - run:
+          name: Run fake migrations to ensure they can be applied
+          command: |
+            pipenv run python manage.py migrate --fake --noinput
 
   test:
-    executor: python-executor
+    executor: machine-executor
     steps:
       - checkout
-      - install-pipenv-dependencies
+      - install-python-machine
       - run:
           name: Run tests
           command: |
-            export DJANGO_SETTINGS_MODULE=mahjong_api.test_settings
             pipenv run python manage.py test
+          no_output_timeout: 10m
 
   lint:
     executor: python-executor
