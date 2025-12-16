@@ -6,6 +6,8 @@ Common settings shared across all environments.
 
 from pathlib import Path
 
+from mahjong_api import env
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -127,3 +129,16 @@ CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_SOFT_TIME_LIMIT = 25
 CELERY_TASK_TIME_LIMIT = 30
+
+
+# AWS S3 settings
+
+AWS_STORAGE_BUCKET_NAME = env.AWS_STORAGE_BUCKET_NAME
+
+
+# ML Model settings
+
+MODEL_DIR = env.MODEL_DIR
+MODEL_S3_URI = env.MODEL_S3_URI
+TILE_DETECTOR_MODEL_NAME = env.TILE_DETECTOR_MODEL_NAME
+TILE_DETECTOR_MODEL_VERSION = env.TILE_DETECTOR_MODEL_VERSION
