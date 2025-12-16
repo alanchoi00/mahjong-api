@@ -2,7 +2,7 @@
 Django settings module with automatic environment detection.
 
 Automatically selects the appropriate settings based on:
-1. DJANGO_ENV environment variable (production, development, test)
+1. DJANGO_ENV environment variable (production, development, test, ci)
 2. Running tests (auto-detects `manage.py test` command)
 3. Defaults to development settings
 """
@@ -25,6 +25,8 @@ def _get_settings_module() -> str:
         return 'mahjong_api.settings.production'
     elif django_env == 'test':
         return 'mahjong_api.settings.test'
+    elif django_env == 'ci':
+        return 'mahjong_api.settings.ci'
     elif django_env == 'development':
         return 'mahjong_api.settings.development'
 
@@ -43,5 +45,7 @@ if _settings_module == 'mahjong_api.settings.production':
     from .production import *  # noqa: F401, F403
 elif _settings_module == 'mahjong_api.settings.test':
     from .test import *  # noqa: F401, F403
+elif _settings_module == 'mahjong_api.settings.ci':
+    from .ci import *  # noqa: F401, F403
 else:
     from .development import *  # noqa: F401, F403

@@ -48,7 +48,7 @@ jobs:
   check_migrations:
     executor: python-executor
     environment:
-      DJANGO_ENV: test
+      DJANGO_ENV: ci
     steps:
       - checkout
       - install-pipenv-dependencies
@@ -77,7 +77,7 @@ jobs:
   lint:
     executor: python-executor
     environment:
-      DJANGO_ENV: test
+      DJANGO_ENV: ci
     steps:
       - checkout
       - install-pipenv-dependencies
