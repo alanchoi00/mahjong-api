@@ -2,12 +2,21 @@
 
 A Django REST Framework backend for mahjong tile detection. Upload images of mahjong hands and get back detected tiles using YOLO-based machine learning inference.
 
+## What is Mahjong?
+
+Mahjong is a tile-based game that originated in China. Players draw and discard tiles to form winning combinations. This API helps players by automatically detecting tiles from photos of their hand, enabling features like:
+
+- **Hand analysis**: Identify all tiles in a player's hand
+- **Scoring assistance**: Calculate potential winning hands and points
+- **Learning aid**: Help new players understand tile recognition
+
 ## Features
 
 - **Presigned S3 Uploads**: Secure, direct-to-S3 file uploads via presigned URLs
-- **ML Tile Detection**: YOLO-based object detection for identifying mahjong tiles
+- **ML Tile Detection**: YOLO-based object detection for identifying mahjong tiles from photos
 - **Async Processing**: Celery task queue with AWS SQS for background inference jobs
-- **Anonymous Clients**: Track app installations without user accounts
+- **Anonymous Clients**: Track app installations without requiring user accounts
+- **S3 Model Loading**: Automatically downloads ML model weights from S3 at worker startup
 
 ## Architecture
 
@@ -20,6 +29,7 @@ flowchart TB
     subgraph AWS
         S3[(S3 Bucket)]
         SQS[SQS Queue]
+        S3Models[(S3 Models)]
     end
 
     subgraph Backend
@@ -36,6 +46,7 @@ flowchart TB
     API -->|5. Queue detection task| SQS
     API <--> DB
     SQS --> Worker
+    S3Models -->|Download on startup| Worker
     Worker --> Model
     Worker --> S3
     Worker --> DB
@@ -50,6 +61,7 @@ flowchart TB
 | `asset`  | S3 upload sessions, asset storage, polymorphic references |
 | `hand`   | Mahjong hand detection, Celery tasks                      |
 | `rule`   | Mahjong rule sets (placeholder)                           |
+| `ml`     | Machine learning inference and model loading              |
 
 ## Requirements
 
@@ -109,10 +121,11 @@ AWS_REGION=ap-southeast-2
 CELERY_BROKER_URL=sqs://
 CELERY_SQS_QUEUE_URL=https://sqs.ap-southeast-2.amazonaws.com/xxx/queue-name
 
-# ML Model
-TILE_DETECTOR_MODEL_NAME=tile-detector
-TILE_DETECTOR_MODEL_VERSION=v1.0.0
-MODEL_DIR=/path/to/models
+# ML Model (optional - has defaults)
+MODEL_S3_URI=s3://your-bucket/ml/models/tile_detector/v0.1.0/model.pt
+TILE_DETECTOR_MODEL_NAME=tile_detector
+TILE_DETECTOR_MODEL_VERSION=v0.1.0
+MODEL_DIR=/ml/models
 ```
 
 ### 4. Run Migrations
@@ -173,34 +186,37 @@ Test settings are auto-detected when running `manage.py test` - no environment v
 ```
 mahjong-api/
 ├── asset/                 # Upload & asset management
-│   ├── models.py          # Asset, UploadSession, AssetRef
+│   ├── models/            # Asset, UploadSession, AssetRef
 │   ├── services/          # Business logic
-│   │   ├── s3.py         # S3 operations
-│   │   └── uploads.py    # Upload flow
-│   ├── views/            # API endpoints
-│   └── serializers/      # Request/response schemas
+│   │   ├── s3.py          # S3 operations (upload, download)
+│   │   └── uploads.py     # Upload flow
+│   ├── views/             # API endpoints
+│   └── serializers/       # Request/response schemas
 ├── core/                  # Shared utilities
-│   ├── models.py         # TimeStampedModel base
-│   └── exceptions.py     # Custom API exceptions
-├── hand/                 # Hand detection
-│   ├── models.py         # Hand model
-│   └── tasks.py          # Celery tasks
+│   ├── models.py          # TimeStampedModel base
+│   └── exceptions.py      # Custom API exceptions
+├── hand/                  # Hand detection
+│   ├── models/            # Hand model
+│   └── tasks.py           # Celery tasks
 ├── ml/                    # Machine learning
-│   └── inference/
-│       └── model.py      # YOLO model loading
-├── user/                 # Client tracking
-│   └── models.py         # Client model
+│   ├── inference/
+│   │   ├── model.py       # YOLO model loading
+│   │   └── model_loader.py # S3 model download
+│   └── models/            # Model weights & metadata
+├── user/                  # Client tracking
+│   └── models/            # Client model
 ├── mahjong_api/
-│   ├── settings/         # Django settings
-│   │   ├── base.py      # Shared config
-│   │   ├── development.py
-│   │   ├── production.py
-│   │   └── test.py
-│   ├── env.py           # Environment variables
-│   ├── celery.py        # Celery configuration
-│   └── urls.py          # URL routing
-├── .aws/                 # ECS task definitions
-├── .circleci/           # CI configuration
+│   ├── settings/          # Django settings
+│   │   ├── base.py        # Shared config
+│   │   ├── development.py # Local dev
+│   │   ├── production.py  # Production
+│   │   ├── test.py        # Tests (PostgreSQL via testcontainers)
+│   │   └── ci.py          # CI jobs (SQLite, no Docker)
+│   ├── env.py             # Environment variable loading
+│   ├── celery.py          # Celery configuration
+│   └── urls.py            # URL routing
+├── .aws/                  # ECS task definitions
+├── .circleci/             # CI configuration
 ├── Dockerfile
 ├── Pipfile
 └── Pipfile.lock
@@ -220,9 +236,26 @@ docker run -p 8000:8000 --env-file .env mahjong-api
 The project includes ECS Fargate task definitions in `.aws/`:
 
 - `ecs-task-def.json` - Web service (Gunicorn)
-- `ecs-worker-task-def.json` - Celery worker
+- `ecs-worker-task-def.json` - Celery worker (downloads model from S3 on startup)
 
 Secrets are stored in AWS Systems Manager Parameter Store under `/mahjong/`.
+
+#### Model Loading
+
+The Celery worker automatically downloads YOLO model weights from S3 at startup:
+1. Worker starts and triggers `worker_init` signal
+2. `model_loader.py` checks if model exists locally
+3. If missing, downloads from `MODEL_S3_URI` to `MODEL_DIR`
+4. Worker fails fast if download fails (ECS restarts container)
+
+Required IAM permission for the ECS task role:
+```json
+{
+    "Effect": "Allow",
+    "Action": "s3:GetObject",
+    "Resource": "arn:aws:s3:::your-bucket/ml/models/*"
+}
+```
 
 ## Environment Variables
 
@@ -233,14 +266,15 @@ Secrets are stored in AWS Systems Manager Parameter Store under `/mahjong/`.
 | `AWS_ACCESS_KEY_ID` | Yes | AWS credentials |
 | `AWS_SECRET_ACCESS_KEY` | Yes | AWS credentials |
 | `AWS_STORAGE_BUCKET_NAME` | Yes | S3 bucket for uploads |
-| `TILE_DETECTOR_MODEL_NAME` | Yes | ML model name |
-| `TILE_DETECTOR_MODEL_VERSION` | Yes | ML model version |
-| `DJANGO_ENV` | No | `production` for prod settings |
+| `DJANGO_ENV` | No | `production`, `development`, `test`, or `ci` |
 | `DJANGO_DEBUG` | No | Enable debug mode (default: True) |
 | `DJANGO_ALLOWED_HOSTS` | No | Comma-separated hosts (default: *) |
 | `AWS_REGION` | No | AWS region (default: ap-southeast-2) |
 | `CELERY_BROKER_URL` | No | Celery broker (default: sqs://) |
-| `MODEL_DIR` | No | Model directory (default: /ml/models) |
+| `MODEL_S3_URI` | No | S3 URI for model weights (worker only) |
+| `MODEL_DIR` | No | Local model directory (default: /ml/models) |
+| `TILE_DETECTOR_MODEL_NAME` | No | Model name (default: tile_detector) |
+| `TILE_DETECTOR_MODEL_VERSION` | No | Model version (default: v0.1.0) |
 
 ## License
 
