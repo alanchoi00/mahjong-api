@@ -3,6 +3,15 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 name = "pypi"
 
+[scripts]
+start = "python manage.py runserver"
+shell = "python manage.py shell"
+migrate = "python manage.py migrate"
+makemigrations = "python manage.py makemigrations"
+collectstatic = "python manage.py collectstatic --noinput"
+test = "python manage.py test"
+new-app = "python manage.py startapp"
+
 [packages]
 django = "*"
 djangorestframework = "*"
@@ -16,6 +25,13 @@ whitenoise = "*"
 celery = "*"
 boto3 = "*"
 django-celery-results = "*"
+psycopg = {extras = ["binary"], version = "*"}
+ultralytics = "*"
+filetype = "*"
+attrs = "*"
+pillow = "*"
+factory-boy = "*"
+testcontainers = "*"
 
 [dev-packages]
 ruff = "*"

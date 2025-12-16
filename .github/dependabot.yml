@@ -11,6 +11,8 @@ updates:
     commit-message:
       prefix: "build"
       include: "scope"
+    assignees:
+      - "beep-boop-ci"
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
@@ -27,3 +29,5 @@ updates:
         update-types: ["version-update:semver-patch"]
       - dependency-name: "pre-commit"
         update-types: ["version-update:semver-patch"]
+    assignees:
+      - "beep-boop-ci"
