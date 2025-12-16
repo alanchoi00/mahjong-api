@@ -10,9 +10,10 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+from django.conf import settings
+
 from asset.exceptions import ModelDownloadError
 from asset.services.s3 import download_file
-from mahjong_api import env
 
 logger = logging.getLogger(__name__)
 
@@ -57,12 +58,12 @@ def get_model_local_path() -> str:
     Get the local path for the model file.
 
     Derives path from MODEL_DIR, TILE_DETECTOR_MODEL_NAME, and
-    TILE_DETECTOR_MODEL_VERSION environment variables.
+    TILE_DETECTOR_MODEL_VERSION settings.
     """
     return str(
-        Path(env.MODEL_DIR)
-        / env.TILE_DETECTOR_MODEL_NAME
-        / env.TILE_DETECTOR_MODEL_VERSION
+        Path(settings.MODEL_DIR)
+        / settings.TILE_DETECTOR_MODEL_NAME
+        / settings.TILE_DETECTOR_MODEL_VERSION
         / 'model.pt',
     )
 
@@ -80,7 +81,7 @@ def ensure_model_local() -> str:
     Raises:
         ModelDownloadError: If download fails or required env vars are missing.
     """
-    s3_uri = env.MODEL_S3_URI
+    s3_uri = settings.MODEL_S3_URI
 
     if not s3_uri:
         raise ModelDownloadError(
