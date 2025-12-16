@@ -41,7 +41,7 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'mahjong_api.urls'
-APPEND_SLASH = False
+APPEND_SLASH = True
 
 TEMPLATES = [
     {
