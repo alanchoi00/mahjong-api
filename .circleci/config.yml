@@ -47,6 +47,8 @@ commands:
 jobs:
   check_migrations:
     executor: python-executor
+    environment:
+      DJANGO_ENV: test
     steps:
       - checkout
       - install-pipenv-dependencies
