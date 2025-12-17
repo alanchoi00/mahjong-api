@@ -19,7 +19,6 @@ from asset.services.uploads import (
     generate_storage_key,
     validate_content_type,
 )
-from hand.models import Hand
 
 
 class TestValidateContentType(TestCase):
@@ -44,18 +43,33 @@ class TestValidateContentType(TestCase):
 class TestGenerateStorageKey(TestCase):
     def test_jpeg_extension_converted_to_jpg(self):
         asset_id = uuid.uuid4()
-        key = generate_storage_key('client123', asset_id, 'image/jpeg')
-        self.assertEqual(key, f'uploads/client123/{asset_id}.jpg')
+        key = generate_storage_key(
+            'client123',
+            asset_id,
+            'image/jpeg',
+            'hand_photo',
+        )
+        self.assertEqual(key, f'uploads/client123/hand_photo/{asset_id}.jpg')
 
     def test_png_extension(self):
         asset_id = uuid.uuid4()
-        key = generate_storage_key('client123', asset_id, 'image/png')
-        self.assertEqual(key, f'uploads/client123/{asset_id}.png')
+        key = generate_storage_key(
+            'client123',
+            asset_id,
+            'image/png',
+            'hand_photo',
+        )
+        self.assertEqual(key, f'uploads/client123/hand_photo/{asset_id}.png')
 
     def test_webp_extension(self):
         asset_id = uuid.uuid4()
-        key = generate_storage_key('client123', asset_id, 'image/webp')
-        self.assertEqual(key, f'uploads/client123/{asset_id}.webp')
+        key = generate_storage_key(
+            'client123',
+            asset_id,
+            'image/webp',
+            'other',
+        )
+        self.assertEqual(key, f'uploads/client123/other/{asset_id}.webp')
 
 
 class TestCreatePresignedUpload(TestCase):
@@ -118,13 +132,15 @@ class TestCompleteUpload(TestCase):
         asset = AssetFactory(upload_session=session)
 
         result = complete_upload(
-            upload_session_id=session.id,
             asset_id=asset.id,
+            install_id=session.client.install_id,
         )
 
         self.assertEqual(result.upload_session_id, session.id)
         self.assertEqual(result.asset_id, asset.id)
-        self.assertIsNotNone(result.hand_id)
+        self.assertTrue(result.is_active)
+        self.assertEqual(result.byte_size, 12345)
+        self.assertEqual(result.checksum, '"abc123"')
 
         session.refresh_from_db()
         self.assertEqual(session.status, UploadStatus.COMPLETED.value)
@@ -133,9 +149,6 @@ class TestCompleteUpload(TestCase):
         self.assertTrue(asset.is_active)
         self.assertEqual(asset.byte_size, 12345)
 
-        hand = Hand.objects.get(id=result.hand_id)
-        self.assertEqual(hand.client, session.client)
-
     @patch('asset.services.uploads.head_object')
     def test_wrong_session_state_raises_error(self, mock_head):
         session = UploadSessionFactory(status=UploadStatus.CREATED.value)
@@ -143,8 +156,8 @@ class TestCompleteUpload(TestCase):
 
         with self.assertRaises(InvalidUploadSessionStateError):
             complete_upload(
-                upload_session_id=session.id,
                 asset_id=asset.id,
+                install_id=session.client.install_id,
             )
 
         mock_head.assert_not_called()
@@ -157,24 +170,26 @@ class TestCompleteUpload(TestCase):
 
         with self.assertRaises(UploadNotCompleteError):
             complete_upload(
-                upload_session_id=session.id,
                 asset_id=asset.id,
-            )
-
-    @patch('asset.services.uploads.head_object')
-    def test_nonexistent_session_raises_error(self, mock_head):
-        with self.assertRaises(ObjectDoesNotExist):
-            complete_upload(
-                upload_session_id=uuid.uuid4(),
-                asset_id=uuid.uuid4(),
+                install_id=session.client.install_id,
             )
 
     @patch('asset.services.uploads.head_object')
     def test_nonexistent_asset_raises_error(self, mock_head):
+        with self.assertRaises(ObjectDoesNotExist):
+            complete_upload(
+                asset_id=uuid.uuid4(),
+                install_id='nonexistent',
+            )
+
+    @patch('asset.services.uploads.head_object')
+    def test_ownership_validation_fails(self, mock_head):
         session = UploadSessionFactory(status=UploadStatus.PRESIGNED.value)
+        asset = AssetFactory(upload_session=session)
+        other_client = ClientFactory()
 
         with self.assertRaises(ObjectDoesNotExist):
             complete_upload(
-                upload_session_id=session.id,
-                asset_id=uuid.uuid4(),
+                asset_id=asset.id,
+                install_id=other_client.install_id,
             )

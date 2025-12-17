@@ -4,11 +4,8 @@ from dataclasses import dataclass
 from django.conf import settings
 from django.db import transaction
 
-from hand.constants import HandSource
-from hand.models import Hand
 from asset.constants import (
     ALLOWED_IMAGE_MIMES,
-    AssetRole,
     StorageProvider,
     UploadPurpose,
     UploadStatus,
@@ -18,7 +15,7 @@ from asset.exceptions import (
     InvalidUploadSessionStateError,
     UploadNotCompleteError,
 )
-from asset.models import Asset, AssetRef, UploadSession
+from asset.models import Asset, UploadSession
 from asset.services.s3 import generate_presigned_put_url, head_object
 from user.models import Client
 
@@ -35,8 +32,9 @@ class PresignResult:
 class CompleteResult:
     upload_session_id: uuid.UUID
     asset_id: uuid.UUID
-    hand_id: uuid.UUID
-    asset_ref_id: uuid.UUID
+    is_active: bool
+    byte_size: int
+    checksum: str | None
 
 
 def validate_content_type(content_type: str) -> None:
@@ -53,11 +51,12 @@ def generate_storage_key(
     client_id: str,
     asset_id: uuid.UUID,
     content_type: str,
+    purpose: str,
 ) -> str:
     extension = content_type.split('/')[-1]
     if extension == 'jpeg':
         extension = 'jpg'
-    return f'uploads/{client_id}/{asset_id}.{extension}'
+    return f'uploads/{client_id}/{purpose}/{asset_id}.{extension}'
 
 
 def create_presigned_upload(
@@ -66,6 +65,23 @@ def create_presigned_upload(
     content_type: str,
     purpose: str = UploadPurpose.HAND_PHOTO.value,
 ) -> PresignResult:
+    """
+    Generate a presigned PUT URL for uploading an asset and create the
+    corresponding UploadSession and Asset in the PRESIGNED state.
+
+    Args:
+        install_id: Install identifier for the owning client.
+        content_type: MIME type of the file (must be in ALLOWED_IMAGE_MIMES).
+        purpose: Purpose of the upload (defaults to HAND_PHOTO).
+
+    Returns:
+        PresignResult with upload_session_id, asset_id, presigned_url,
+        and storage_key.
+
+    Raises:
+        InvalidFileTypeError: If content_type is not allowed.
+        Client.DoesNotExist: If no client exists with the provided install_id.
+    """
     validate_content_type(content_type)
     client = Client.objects.get(install_id=install_id)
 
@@ -74,6 +90,7 @@ def create_presigned_upload(
         client.install_id,
         asset_id,
         content_type,
+        purpose,
     )
     bucket_name = settings.AWS_STORAGE_BUCKET_NAME
 
@@ -110,11 +127,32 @@ def create_presigned_upload(
 
 def complete_upload(
     *,
-    upload_session_id: uuid.UUID,
     asset_id: uuid.UUID,
-    captured_at: str | None = None,
+    install_id: str,
 ) -> CompleteResult:
-    upload_session = UploadSession.objects.get(id=upload_session_id)
+    """
+    Complete an upload by validating the file exists in storage and updating
+    asset metadata.
+
+    Does NOT create Hand or AssetRef - that happens when detection is triggered.
+
+    Args:
+        asset_id: The asset ID to complete.
+        install_id: The install_id for ownership validation.
+
+    Returns:
+        CompleteResult with asset metadata.
+
+    Raises:
+        Asset.DoesNotExist: If asset not found or ownership mismatch.
+        InvalidUploadSessionStateError: If session not in PRESIGNED state.
+        UploadNotCompleteError: If file not found in storage.
+    """
+    asset = Asset.objects.select_related('upload_session__client').get(
+        id=asset_id,
+        upload_session__client__install_id=install_id,
+    )
+    upload_session = asset.upload_session
 
     if upload_session.status != UploadStatus.PRESIGNED.value:
         raise InvalidUploadSessionStateError(
@@ -123,8 +161,6 @@ def complete_upload(
                 f'expected "{UploadStatus.PRESIGNED.value}"'
             ),
         )
-
-    asset = Asset.objects.get(id=asset_id, upload_session=upload_session)
 
     metadata = head_object(
         bucket_name=settings.AWS_STORAGE_BUCKET_NAME,
@@ -147,21 +183,10 @@ def complete_upload(
         upload_session.status = UploadStatus.COMPLETED.value
         upload_session.save(update_fields=['status', 'updated_at'])
 
-        hand = Hand.objects.create(
-            client=upload_session.client,
-            source=HandSource.CAMERA.value,
-        )
-
-        asset_ref = AssetRef.attach(
-            asset=asset,
-            owner=hand,
-            role=AssetRole.HAND_PHOTO.value,
-            captured_at=captured_at,
-        )
-
     return CompleteResult(
         upload_session_id=upload_session.id,
         asset_id=asset.id,
-        hand_id=hand.id,
-        asset_ref_id=asset_ref.id,
+        is_active=asset.is_active,
+        byte_size=asset.byte_size,
+        checksum=asset.checksum,
     )

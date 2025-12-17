@@ -31,7 +31,6 @@ class UploadStatus(Enum):
 
 class UploadPurpose(Enum):
     HAND_PHOTO = 'hand_photo'
-    DETECT_TEST = 'detect_test'
     OTHER = 'other'
 
     @classmethod
@@ -41,8 +40,6 @@ class UploadPurpose(Enum):
 
 class AssetRole(Enum):
     HAND_PHOTO = 'hand_photo'
-    HAND_CROPPED = 'hand_cropped'
-    AVATAR = 'avatar'
 
     @classmethod
     def choices(cls):

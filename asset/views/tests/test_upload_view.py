@@ -16,11 +16,8 @@ class TestUploadsViewSetPresign(APITestCase):
 
         response = self.client.post(
             '/asset/upload/presign/',
-            {
-                'install_id': client.install_id,
-                'content_type': 'image/jpeg',
-                'purpose': 'hand_photo',
-            },
+            {'content_type': 'image/jpeg', 'purpose': 'hand_photo'},
+            HTTP_X_INSTALL_ID=client.install_id,
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -34,38 +31,34 @@ class TestUploadsViewSetPresign(APITestCase):
 
         response = self.client.post(
             '/asset/upload/presign/',
-            {
-                'install_id': client.install_id,
-                'content_type': 'application/pdf',
-            },
+            {'content_type': 'application/pdf'},
+            HTTP_X_INSTALL_ID=client.install_id,
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_missing_install_id(self):
+    def test_missing_install_id_header(self):
         response = self.client.post(
             '/asset/upload/presign/',
-            {
-                'content_type': 'image/jpeg',
-            },
+            {'content_type': 'image/jpeg'},
         )
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # NotAuthenticated returns 403 in DRF when no auth classes configured
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_missing_content_type(self):
         client = ClientFactory()
 
         response = self.client.post(
             '/asset/upload/presign/',
-            {
-                'install_id': client.install_id,
-            },
+            {},
+            HTTP_X_INSTALL_ID=client.install_id,
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
-class TestUploadsViewSetComplete(APITestCase):
+class TestAssetViewSetComplete(APITestCase):
     @patch('asset.services.uploads.head_object')
     def test_success(self, mock_head):
         mock_head.return_value = S3ObjectMetadata(
@@ -77,18 +70,18 @@ class TestUploadsViewSetComplete(APITestCase):
         asset = AssetFactory(upload_session=session)
 
         response = self.client.post(
-            '/asset/upload/complete/',
-            {
-                'upload_session_id': str(session.id),
-                'asset_id': str(asset.id),
-            },
+            f'/asset/{asset.id}/upload/complete/',
+            HTTP_X_INSTALL_ID=session.client.install_id,
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('upload_session_id', response.data)
         self.assertIn('asset_id', response.data)
-        self.assertIn('hand_id', response.data)
-        self.assertIn('asset_ref_id', response.data)
+        self.assertIn('is_active', response.data)
+        self.assertIn('byte_size', response.data)
+        self.assertIn('checksum', response.data)
+        self.assertTrue(response.data['is_active'])
+        self.assertEqual(response.data['byte_size'], 12345)
 
     @patch('asset.services.uploads.head_object')
     def test_file_not_uploaded(self, mock_head):
@@ -97,28 +90,31 @@ class TestUploadsViewSetComplete(APITestCase):
         asset = AssetFactory(upload_session=session)
 
         response = self.client.post(
-            '/asset/upload/complete/',
-            {
-                'upload_session_id': str(session.id),
-                'asset_id': str(asset.id),
-            },
+            f'/asset/{asset.id}/upload/complete/',
+            HTTP_X_INSTALL_ID=session.client.install_id,
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data['code'], 'upload_not_complete')
 
-    def test_missing_fields(self):
-        response = self.client.post('/asset/upload/complete/', {})
+    def test_missing_install_id_header(self):
+        session = UploadSessionFactory(status=UploadStatus.PRESIGNED.value)
+        asset = AssetFactory(upload_session=session)
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        response = self.client.post(f'/asset/{asset.id}/upload/complete/')
 
-    def test_invalid_uuid_format(self):
+        # NotAuthenticated returns 403 in DRF when no auth classes configured
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @patch('asset.services.uploads.head_object')
+    def test_ownership_validation(self, mock_head):
+        session = UploadSessionFactory(status=UploadStatus.PRESIGNED.value)
+        asset = AssetFactory(upload_session=session)
+        other_client = ClientFactory()
+
         response = self.client.post(
-            '/asset/upload/complete/',
-            {
-                'upload_session_id': 'not-a-uuid',
-                'asset_id': 'not-a-uuid',
-            },
+            f'/asset/{asset.id}/upload/complete/',
+            HTTP_X_INSTALL_ID=other_client.install_id,
         )
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
