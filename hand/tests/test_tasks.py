@@ -33,7 +33,7 @@ class TestRunHandDetection(TestCase):
             model_version='v0.1.0',
         )
 
-    @patch('hand.tasks.run_inference')
+    @patch('hand.services.inference.run_inference')
     def test_success_saves_tiles(self, mock_inference):
         mock_inference.return_value = InferenceResult(
             tiles=[
@@ -73,7 +73,7 @@ class TestRunHandDetection(TestCase):
         self.assertIn('1B', tile_codes)
         self.assertIn('RD', tile_codes)
 
-    @patch('hand.tasks.run_inference')
+    @patch('hand.services.inference.run_inference')
     def test_marks_running_before_inference(self, mock_inference):
         def check_status(*args, **kwargs):
             self.detection.refresh_from_db()
@@ -87,7 +87,7 @@ class TestRunHandDetection(TestCase):
 
         run_hand_detection(str(self.detection.id))
 
-    @patch('hand.tasks.run_inference')
+    @patch('hand.services.inference.run_inference')
     def test_unknown_label_marks_failed(self, mock_inference):
         mock_inference.side_effect = UnknownTileLabelError(
             message='Unknown label: UNKNOWN',
@@ -100,7 +100,7 @@ class TestRunHandDetection(TestCase):
         self.assertEqual(self.detection.error_code, 'UnknownTileLabelError')
         self.assertIn('Unknown label', self.detection.error_message)
 
-    @patch('hand.tasks.run_inference')
+    @patch('hand.services.inference.run_inference')
     def test_generic_error_marks_failed(self, mock_inference):
         mock_inference.side_effect = ValueError('Something went wrong')
 
@@ -115,7 +115,7 @@ class TestRunHandDetection(TestCase):
         # Should not raise, just log
         run_hand_detection(str(uuid.uuid4()))
 
-    @patch('hand.tasks.run_inference')
+    @patch('hand.services.inference.run_inference')
     def test_skips_already_succeeded(self, mock_inference):
         self.detection.status = DetectionStatus.SUCCEEDED.value
         self.detection.save()
@@ -124,7 +124,7 @@ class TestRunHandDetection(TestCase):
 
         mock_inference.assert_not_called()
 
-    @patch('hand.tasks.run_inference')
+    @patch('hand.services.inference.run_inference')
     def test_skips_already_failed(self, mock_inference):
         self.detection.status = DetectionStatus.FAILED.value
         self.detection.save()

@@ -5,7 +5,10 @@ from django.db import transaction
 
 from hand.constants import DetectionStatus
 from hand.models import HandDetection, DetectionTile
-from hand.services.inference import run_inference
+
+# NOTE: Do NOT import hand.services.inference at module level!
+# The inference module imports ml.inference.model which imports ultralytics/cv2.
+# These ML dependencies should only load inside the Celery worker at task runtime.
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +50,10 @@ def run_hand_detection(self, hand_detection_id: str):
     detection.save(update_fields=['status', 'updated_at'])
 
     try:
+        # Lazy import to avoid loading ML dependencies at module import time
+        # This ensures Django startup/migrations don't import ultralytics/cv2
+        from hand.services.inference import run_inference
+
         storage_key = detection.asset_ref.asset.storage_key
 
         result = run_inference(

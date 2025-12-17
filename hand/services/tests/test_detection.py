@@ -25,8 +25,8 @@ from hand.services.detection import (
     TILE_DETECTOR_MODEL_VERSION='v0.1.0',
 )
 class TestTriggerHandDetection(TestCase):
-    @patch('hand.services.detection.run_hand_detection.delay')
-    def test_creates_hand_asset_ref_detection(self, mock_task):
+    @patch('hand.services.detection.current_app.send_task')
+    def test_creates_hand_asset_ref_detection(self, mock_send_task):
         session = UploadSessionFactory(status=UploadStatus.COMPLETED.value)
         asset = AssetFactory(upload_session=session, is_active=True)
 
@@ -60,11 +60,14 @@ class TestTriggerHandDetection(TestCase):
         self.assertEqual(detection.model_name, 'tile_detector')
         self.assertEqual(detection.model_version, 'v0.1.0')
 
-        # Verify Celery task was enqueued
-        mock_task.assert_called_once_with(str(detection.id))
+        # Verify Celery task was enqueued via send_task
+        mock_send_task.assert_called_once_with(
+            'hand.tasks.run_hand_detection',
+            args=[str(detection.id)],
+        )
 
-    @patch('hand.services.detection.run_hand_detection.delay')
-    def test_ownership_validation_fails(self, mock_task):
+    @patch('hand.services.detection.current_app.send_task')
+    def test_ownership_validation_fails(self, mock_send_task):
         session = UploadSessionFactory(status=UploadStatus.COMPLETED.value)
         asset = AssetFactory(upload_session=session, is_active=True)
         other_client = ClientFactory()
@@ -75,10 +78,10 @@ class TestTriggerHandDetection(TestCase):
                 install_id=other_client.install_id,
             )
 
-        mock_task.assert_not_called()
+        mock_send_task.assert_not_called()
 
-    @patch('hand.services.detection.run_hand_detection.delay')
-    def test_asset_not_active_fails(self, mock_task):
+    @patch('hand.services.detection.current_app.send_task')
+    def test_asset_not_active_fails(self, mock_send_task):
         session = UploadSessionFactory(status=UploadStatus.PRESIGNED.value)
         asset = AssetFactory(upload_session=session, is_active=False)
 
@@ -88,10 +91,10 @@ class TestTriggerHandDetection(TestCase):
                 install_id=session.client.install_id,
             )
 
-        mock_task.assert_not_called()
+        mock_send_task.assert_not_called()
 
-    @patch('hand.services.detection.run_hand_detection.delay')
-    def test_idempotency_returns_existing_pending(self, mock_task):
+    @patch('hand.services.detection.current_app.send_task')
+    def test_idempotency_returns_existing_pending(self, mock_send_task):
         session = UploadSessionFactory(status=UploadStatus.COMPLETED.value)
         asset = AssetFactory(upload_session=session, is_active=True)
 
@@ -108,10 +111,10 @@ class TestTriggerHandDetection(TestCase):
         )
 
         self.assertEqual(result1.hand_detection_id, result2.hand_detection_id)
-        self.assertEqual(mock_task.call_count, 1)
+        self.assertEqual(mock_send_task.call_count, 1)
 
-    @patch('hand.services.detection.run_hand_detection.delay')
-    def test_idempotency_creates_new_on_failed(self, mock_task):
+    @patch('hand.services.detection.current_app.send_task')
+    def test_idempotency_creates_new_on_failed(self, mock_send_task):
         session = UploadSessionFactory(status=UploadStatus.COMPLETED.value)
         asset = AssetFactory(upload_session=session, is_active=True)
 
@@ -136,7 +139,7 @@ class TestTriggerHandDetection(TestCase):
             result1.hand_detection_id,
             result2.hand_detection_id,
         )
-        self.assertEqual(mock_task.call_count, 2)
+        self.assertEqual(mock_send_task.call_count, 2)
 
 
 class TestGetHandDetection(TestCase):

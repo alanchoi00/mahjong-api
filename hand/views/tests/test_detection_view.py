@@ -17,8 +17,8 @@ from hand.models import Hand, HandDetection
     TILE_DETECTOR_MODEL_VERSION='v0.1.0',
 )
 class TestDetectionViewSetTrigger(APITestCase):
-    @patch('hand.services.detection.run_hand_detection.delay')
-    def test_success(self, mock_task):
+    @patch('hand.services.detection.current_app.send_task')
+    def test_success(self, mock_send_task):
         session = UploadSessionFactory(status=UploadStatus.COMPLETED.value)
         asset = AssetFactory(upload_session=session, is_active=True)
 
@@ -37,10 +37,10 @@ class TestDetectionViewSetTrigger(APITestCase):
             DetectionStatus.PENDING.value,
         )
 
-        mock_task.assert_called_once()
+        mock_send_task.assert_called_once()
 
-    @patch('hand.services.detection.run_hand_detection.delay')
-    def test_default_source(self, mock_task):
+    @patch('hand.services.detection.current_app.send_task')
+    def test_default_source(self, mock_send_task):
         session = UploadSessionFactory(status=UploadStatus.COMPLETED.value)
         asset = AssetFactory(upload_session=session, is_active=True)
 
@@ -72,8 +72,8 @@ class TestDetectionViewSetTrigger(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @patch('hand.services.detection.run_hand_detection.delay')
-    def test_asset_not_active(self, mock_task):
+    @patch('hand.services.detection.current_app.send_task')
+    def test_asset_not_active(self, mock_send_task):
         session = UploadSessionFactory(status=UploadStatus.PRESIGNED.value)
         asset = AssetFactory(upload_session=session, is_active=False)
 
@@ -86,10 +86,10 @@ class TestDetectionViewSetTrigger(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data['code'], 'asset_not_active')
 
-        mock_task.assert_not_called()
+        mock_send_task.assert_not_called()
 
-    @patch('hand.services.detection.run_hand_detection.delay')
-    def test_ownership_validation(self, mock_task):
+    @patch('hand.services.detection.current_app.send_task')
+    def test_ownership_validation(self, mock_send_task):
         session = UploadSessionFactory(status=UploadStatus.COMPLETED.value)
         asset = AssetFactory(upload_session=session, is_active=True)
         other_client = ClientFactory()
@@ -103,7 +103,7 @@ class TestDetectionViewSetTrigger(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(response.data['code'], 'asset_ownership_error')
 
-        mock_task.assert_not_called()
+        mock_send_task.assert_not_called()
 
 
 class TestDetectionViewSetRetrieve(APITestCase):

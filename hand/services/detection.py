@@ -1,6 +1,7 @@
 import uuid
 from dataclasses import dataclass
 
+from celery import current_app
 from django.conf import settings
 from django.db import transaction
 
@@ -14,8 +15,10 @@ from hand.exceptions import (
     DetectionOwnershipError,
 )
 from hand.models import Hand, HandDetection
-from hand.tasks import run_hand_detection
 from user.models import Client
+
+
+HAND_DETECTION_TASK_NAME = 'hand.tasks.run_hand_detection'
 
 
 @dataclass(frozen=True)
@@ -114,8 +117,9 @@ def trigger_hand_detection(
             model_version=model_version,
         )
 
-    # Enqueue Celery task
-    run_hand_detection.delay(str(detection.id))
+    # Enqueue Celery task via send_task to avoid importing the task module
+    # This breaks the import chain that would otherwise load ML dependencies
+    current_app.send_task(HAND_DETECTION_TASK_NAME, args=[str(detection.id)])
 
     return TriggerDetectionResult(
         hand_id=hand.id,
