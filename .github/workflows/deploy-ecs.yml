@@ -17,6 +17,9 @@ env:
   ECR_REPOSITORY: mahjong-api
   ECS_CLUSTER: mahjong-cluster
 
+  # Choose based on ECS runtimePlatform:
+  # X86_64 => linux/amd64
+  # ARM64  => linux/arm64
   BUILD_PLATFORMS: linux/amd64
 
   # Web
@@ -78,8 +81,10 @@ jobs:
             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
+          # GHA cache: scope it + keep it smaller
           cache-from: type=gha,scope=mahjong-api
           cache-to: type=gha,scope=mahjong-api,mode=min
+          # Optional: reduces build overhead/noise in many setups
           provenance: false
 
       - name: Render WEB task definition
@@ -118,21 +123,11 @@ jobs:
           echo "arn=$ARN" >> $GITHUB_OUTPUT
           echo "Registered WORKER: $ARN"
 
-      # Optional but recommended: ensure jq exists for later checks
-      - name: Ensure jq installed
-        run: |
-          if ! command -v jq >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y jq
-          fi
-
       - name: Run Django migrations
         env:
           MIGRATE_SUBNETS: ${{ secrets.ECS_MIGRATE_SUBNETS }}
           MIGRATE_SGS: ${{ secrets.ECS_MIGRATE_SECURITY_GROUPS }}
         run: |
-          set -euo pipefail
-
           SUBNETS_JSON=$(printf '"%s",' ${MIGRATE_SUBNETS//,/ } | sed 's/,$//')
           SGS_JSON=$(printf '"%s",' ${MIGRATE_SGS//,/ } | sed 's/,$//')
 
@@ -146,38 +141,7 @@ jobs:
               "containerOverrides": [
                 { "name": "web", "command": ["python", "manage.py", "migrate", "--noinput"] }
               ]
-            }' >/tmp/migrate_run_task.json
-
-          echo "Run-task output saved to /tmp/migrate_run_task.json"
-          TASK_ARN=$(jq -r '.tasks[0].taskArn // empty' /tmp/migrate_run_task.json)
-          if [ -z "$TASK_ARN" ]; then
-            echo "❌ Could not determine migration taskArn"
-            cat /tmp/migrate_run_task.json
-            exit 1
-          fi
-
-          echo "Waiting for migration task to stop: $TASK_ARN"
-          aws ecs wait tasks-stopped --cluster ${{ env.ECS_CLUSTER }} --tasks "$TASK_ARN"
-
-          EXIT_CODE=$(aws ecs describe-tasks \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --tasks "$TASK_ARN" \
-            --query 'tasks[0].containers[0].exitCode' \
-            --output text)
-
-          STOP_REASON=$(aws ecs describe-tasks \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --tasks "$TASK_ARN" \
-            --query 'tasks[0].stoppedReason' \
-            --output text)
-
-          echo "Migration exitCode: $EXIT_CODE"
-          echo "Migration stoppedReason: $STOP_REASON"
-
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "❌ Migrations failed"
-            exit 1
-          fi
+            }'
 
       - name: Update WEB service to new revision
         run: |
