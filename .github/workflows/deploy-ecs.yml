@@ -124,24 +124,65 @@ jobs:
           echo "Registered WORKER: $ARN"
 
       - name: Run Django migrations
+        shell: bash
         env:
           MIGRATE_SUBNETS: ${{ secrets.ECS_MIGRATE_SUBNETS }}
           MIGRATE_SGS: ${{ secrets.ECS_MIGRATE_SECURITY_GROUPS }}
         run: |
+          set -euo pipefail
+
           SUBNETS_JSON=$(printf '"%s",' ${MIGRATE_SUBNETS//,/ } | sed 's/,$//')
           SGS_JSON=$(printf '"%s",' ${MIGRATE_SGS//,/ } | sed 's/,$//')
 
-          aws ecs run-task \
-            --region ${{ env.AWS_REGION }} \
-            --cluster ${{ env.ECS_CLUSTER }} \
-            --launch-type FARGATE \
-            --task-definition ${{ steps.register-web.outputs.arn }} \
-            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS_JSON],securityGroups=[$SGS_JSON],assignPublicIp=ENABLED}" \
-            --overrides '{
-              "containerOverrides": [
-                { "name": "web", "command": ["python", "manage.py", "migrate", "--noinput"] }
-              ]
-            }'
+          TASK_ARN=$(
+            aws ecs run-task \
+              --region "${{ env.AWS_REGION }}" \
+              --cluster "${{ env.ECS_CLUSTER }}" \
+              --launch-type FARGATE \
+              --task-definition "${{ steps.register-web.outputs.arn }}" \
+              --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS_JSON],securityGroups=[$SGS_JSON],assignPublicIp=ENABLED}" \
+              --overrides '{
+                "containerOverrides": [
+                  {
+                    "name": "web",
+                    "command": ["python", "manage.py", "migrate", "--noinput"],
+                    "environment": [{"name":"DJANGO_ENV","value":"production"}]
+                  }
+                ]
+              }' \
+              --query 'tasks[0].taskArn' \
+              --output text
+          )
+
+          echo "Started migration task: $TASK_ARN"
+          aws ecs wait tasks-stopped --cluster "${{ env.ECS_CLUSTER }}" --tasks "$TASK_ARN"
+
+          # Inspect exit code for the "web" container
+          EXIT_CODE=$(
+            aws ecs describe-tasks \
+              --cluster "${{ env.ECS_CLUSTER }}" \
+              --tasks "$TASK_ARN" \
+              --query 'tasks[0].containers[?name==`web`].exitCode | [0]' \
+              --output text
+          )
+
+          REASON=$(
+            aws ecs describe-tasks \
+              --cluster "${{ env.ECS_CLUSTER }}" \
+              --tasks "$TASK_ARN" \
+              --query 'tasks[0].stoppedReason' \
+              --output text
+          )
+
+          echo "Migration exit code: $EXIT_CODE"
+          echo "Stopped reason: $REASON"
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "❌ Migrations failed"
+            exit 1
+          fi
+
+          echo "✅ Migrations succeeded"
 
       - name: Update WEB service to new revision
         run: |
@@ -167,6 +208,9 @@ jobs:
           set -euo pipefail
           aws ecs wait services-stable --cluster "${{ env.ECS_CLUSTER }}" --services "${{ env.ECS_WEB_SERVICE }}"
           aws ecs wait services-stable --cluster "${{ env.ECS_CLUSTER }}" --services "${{ env.ECS_WORKER_SERVICE }}"
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
 
       # HARD GATE: fail if rollback/circuit-breaker happened OR if services didn't end up on the intended task defs
       - name: Verify deploy succeeded (no rollback) + task defs match
