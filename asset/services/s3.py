@@ -78,7 +78,8 @@ def download_file(
         error_code = e.response.get('Error', {}).get('Code', 'Unknown')
         error_msg = e.response.get('Error', {}).get('Message', str(e))
         raise ModelDownloadError(
-            message=f'Failed to download from S3: [{error_code}] {error_msg}',
+            message=f'Failed to download from S3 from s3://{bucket_name}/'
+            f'{object_key}: [{error_code}] {error_msg}',
         ) from e
 
     return os.path.getsize(local_path)
