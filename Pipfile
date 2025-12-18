@@ -33,6 +33,7 @@ attrs = "*"
 pillow = "*"
 factory-boy = "*"
 testcontainers = "*"
+redis = "*"
 
 [dev-packages]
 ruff = "*"
