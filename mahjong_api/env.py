@@ -92,3 +92,9 @@ MODEL_S3_URI = get_optional_env(
     'MODEL_S3_URI',
     None,
 )
+
+# Detection confidence threshold (0.0 to 1.0)
+DETECTION_CONFIDENCE_THRESHOLD = get_optional_env(
+    'DETECTION_CONFIDENCE_THRESHOLD',
+    '0.5',
+)
