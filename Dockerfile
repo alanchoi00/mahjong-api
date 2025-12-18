@@ -4,7 +4,7 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libpq-dev curl \
+    gcc libpq-dev curl libcurl4-openssl-dev libssl-dev \
   && rm -rf /var/lib/apt/lists/*
 
 COPY Pipfile Pipfile.lock* ./
@@ -18,7 +18,7 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 curl \
+    libpq5 curl libcurl4 \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /install /usr/local

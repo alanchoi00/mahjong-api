@@ -22,7 +22,8 @@ psycopg2-binary = "*"
 pip = "*"
 gunicorn = "*"
 whitenoise = "*"
-celery = "*"
+celery = {extras = ["sqs"], version = "*"}
+pycurl = "*"
 boto3 = "*"
 django-celery-results = "*"
 psycopg = {extras = ["binary"], version = "*"}
@@ -32,6 +33,7 @@ attrs = "*"
 pillow = "*"
 factory-boy = "*"
 testcontainers = "*"
+redis = "*"
 
 [dev-packages]
 ruff = "*"

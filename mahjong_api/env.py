@@ -78,11 +78,10 @@ TILE_DETECTOR_MODEL_VERSION = get_optional_env(
 )
 
 # AWS S3 credentials
-AWS_ACCESS_KEY_ID = get_required_env('AWS_ACCESS_KEY_ID', 'AWS access key ID')
-AWS_SECRET_ACCESS_KEY = get_required_env(
-    'AWS_SECRET_ACCESS_KEY',
-    'AWS secret access key',
-)
+# These are optional - if not set, boto3 will use the ECS task role credentials
+# For ECS workers, we prefer task role; for local dev, explicit credentials are fine
+AWS_ACCESS_KEY_ID = get_optional_env('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = get_optional_env('AWS_SECRET_ACCESS_KEY')
 AWS_STORAGE_BUCKET_NAME = get_required_env(
     'AWS_STORAGE_BUCKET_NAME',
     'AWS s3 storage bucket name',
@@ -92,4 +91,10 @@ AWS_STORAGE_BUCKET_NAME = get_required_env(
 MODEL_S3_URI = get_optional_env(
     'MODEL_S3_URI',
     None,
+)
+
+# Detection confidence threshold (0.0 to 1.0)
+DETECTION_CONFIDENCE_THRESHOLD = get_optional_env(
+    'DETECTION_CONFIDENCE_THRESHOLD',
+    '0.5',
 )
