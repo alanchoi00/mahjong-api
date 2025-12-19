@@ -242,10 +242,12 @@ jobs:
 
             PRIMARY_TASKDEF=$(jq -r '.taskDefinition' /tmp/primary.json)
             ROLLOUT_STATE=$(jq -r '.rolloutState // empty' /tmp/primary.json)
+            DEPLOYMENT_ID=$(jq -r '.id' /tmp/primary.json)
 
             echo "Primary taskDefinition: $PRIMARY_TASKDEF"
             echo "Expected taskDefinition: $EXPECTED_TASKDEF"
             echo "Rollout state: ${ROLLOUT_STATE:-"(not provided by ECS)"}"
+            echo "Deployment ID: $DEPLOYMENT_ID"
 
             # Check task def matches what we just registered
             if [ "$PRIMARY_TASKDEF" != "$EXPECTED_TASKDEF" ]; then
@@ -265,9 +267,10 @@ jobs:
               exit 1
             fi
 
-            # Catch rollback/circuit breaker signals in events
-            if jq -r '.events[0:20][]?.message' /tmp/svc.json | grep -Ei 'rollback|circuit breaker|deployment failed|failed deployment|stopped task' >/dev/null; then
-              echo "❌ Detected rollback/circuit-breaker style event for $SERVICE"
+            # Check for rollback/circuit breaker events only for the CURRENT deployment
+            # (ignore historical events from previous deployments)
+            if jq -r '.events[0:20][]?.message' /tmp/svc.json | grep -F "$DEPLOYMENT_ID" | grep -Ei 'rollback|circuit breaker|deployment failed|failed deployment' >/dev/null; then
+              echo "❌ Detected rollback/circuit-breaker event for current deployment $DEPLOYMENT_ID"
               echo "Recent events:"
               jq -r '.events[0:20][]?.message' /tmp/svc.json
               exit 1
